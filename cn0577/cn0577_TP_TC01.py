@@ -122,9 +122,9 @@ def main():
 
 if __name__ == '__main__':
     #If test code is ran locally in FPGA, my_ip is just the localhost. If control will be through a Windows machine/external, need to get IP address of the connected setup through LAN.
-    #hardcoded_ip = 'ip:localhost'
-    #my_ip = sys.argv[2] if len(sys.argv) >= 3 else hardcoded_ip
-    my_ip = "TrishaCabildo"
+    hardcoded_ip = 'ip:localhost'
+    my_ip = sys.argv[2] if len(sys.argv) >= 3 else hardcoded_ip
+    #my_ip = "TrishaCabildo"
     print("\nConnecting with CN0577 context at %s" % (my_ip))
 
     main()
