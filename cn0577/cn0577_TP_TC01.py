@@ -36,7 +36,7 @@
 
 import sys
 import os
-from time import sleep
+import time
 import numpy as np
 from adi import ltc2387
 import libm2k  
@@ -62,6 +62,10 @@ sin_freq = 20000
 n_samples = 256000
 sampling_freq = 10000000
 vref = 4.096
+
+#Window type
+BLACKMAN_HARRIS_92 = 0x30
+def_window_type = BLACKMAN_HARRIS_92
 
 #This function is to check if command line input is correct. Only one argument is needed (serial number of board being tested). If input is more than one argument, test code will exit.
 def check_input():
@@ -117,6 +121,8 @@ def get_noise(shorted_input_data):
         print("RMS noise test FAIL")
         failed_tests.append("Failed rms noise test")
 
+    input("Remove connections to input. Press any key to continue")
+
 def setup_adc(my_ip):
     my_adc = adi.ltc2387(uri=my_ip)
     my_adc.rx_buffer_size = 4096
@@ -130,49 +136,67 @@ def setup_adc(my_ip):
 
     return my_adc
 
-#Setups M2K and produces differential sine wave output
-def m2k_setup():
-    ctx=libm2k.m2kOpen()
+def sinparam_test(voltage,test_in):
+    #windowed_fft_mag function takes in the analog data out of the ADC with its DC component. It gets the ac part of it inside the function so 'voltage' is passed instead of 'ac'
+    fft_data = sp.windowed_fft_mag(voltage,window_type=BLACKMAN_HARRIS_92)
+    fund_amp, fund_bin = sp.get_max(fft_data)
 
-    if ctx is None:
-        print("Connection Error: No ADALM2000 device available/connected to your PC.")
-        exit(1)
+    f_base = sampling_freq/n_samples
+    freq_bin_theo = sin_freq / f_base
 
-    ctx.calibrateADC()
-    ctx.calibrateDAC()
+    #Compare bin location of theoretical vs actual
+    if fund_bin == freq_bin_theo:
+        print("%s Frequency bin PASS" % test_in)
+    else:
+        print("%s Frequency bin FAIL" % test_in)
+        failed_tests.append("%s failed frequency bin" % test_in)
 
-    siggen=ctx.getAnalogOut()
+    #Comparing fundamental amplitude of input vs actual
+    if fund_amp > 4.085 and fund_amp < 4.096:
+        print("%s Fundamental amplitude PASS" % test_in)
+    else:
+        print("%s Fundamental amplitude FAIL" % test_in)
+        failed_tests.append("%s failed Fundamental amplitude" % test_in)
 
-    siggen.enableChannel(0, True)
-    siggen.enableChannel(1, True)
+    time.sleep(2)
 
-    siggen.setSampleRate(0, 256000)
-    siggen.setSampleRate(1, 256000)
+    #Get THD, SNR and SINAD
+    parameters = sp.sin_params(voltage)
+    snr = parameters[1]
+    thd = parameters[2]
+    sinad = parameters[3]   
 
-    x = np.linspace (-np.pi, np.pi, n_samples)
-    print(x)
+    print("SNR = ", snr)
+    if snr > 43:
+        print("%s SNR PASS" % test_in)
+    else:
+        print("%s SNR fail" % test_in)
+        failed_tests.append("%s failed SNR" % test_in)
+    
+    print("THD = ", thd)
+    if thd < -45:
+        print("%s THD PASS" % test_in)
+    else:
+        print("%s THD fail" % test_in)
+        failed_tests.append("%s failed THD" % test_in)
+    
+    print("SINAD = ", sinad)
+    if sinad > 42:
+        print("%s SINAD PASS" % test_in)
+    else:
+        print("%s SINAD fail" % test_in)
+        failed_tests.append("%s failed SINAD" % test_in)
 
-    w1_p = ampl * np.sin(x) + offset
-    w1_n = ampl * np.sin(x + np.pi) + offset
-
-    siggen.push([w1_p,w1_n])
-
-    return ctx
-
-def m2k_close(ctx):
-    siggen.stop()
-    libm2k.contextClose(ctx)
-    del ctx
+    time.sleep(2)
 
 #This function contains the main test procedure of checking the ADC parameters such as THD, SNR, etc. This will return a 0 or 1 to reflect if board has passed or failed.
-def fft_test(sn,my_ip,adc_info):
+def fft_test(sn,my_ip,my_adc,test_in):
     ser_no = sn
-    my_adc = adc_info
 
     data = my_adc.rx()
 
     x = np.arange(0, len(data))
-    voltage = data * 2.0 * vref / (2 ** 18)
+    voltage = data * vref / (2 ** 17)
     dc = np.average(voltage)  # Extract DC component
     if dc < 0.1:
         print("DC offset PASS")
@@ -181,34 +205,7 @@ def fft_test(sn,my_ip,adc_info):
         failed_tests.append("Failed DC offset test")
     ac = voltage - dc  # Extract AC component
 
-    parameters = sp.sin_params(voltage)
-    snr = parameters[1]
-    thd = parameters[2]
-    sinad = parameters[3]
-    # enob = parameters[4]
-    # sfdr = parameters[5]
-    # floor = parameters[6]
-    
-    print("SNR = ", snr)
-    if snr > 43:
-        print("SNR pass")
-    else:
-        print("SNR fail")
-        failed_tests.append("Failed SNR")
-    
-    print("THD = ", thd)
-    if thd < -45:
-        print("THD pass")
-    else:
-        print("THD fail")
-        failed_tests.append("Failed THD")
-    
-    print("SINAD = ", sinad)
-    if sinad > 42:
-        print("SINAD pass")
-    else:
-        print("SINAD fail")
-        failed_tests.append("Failed SINAD")
+    sinparam_test(voltage,test_in)
 
 def main(my_ip):
     print("CN0577 Production Test \nTest script starting....")
@@ -222,10 +219,19 @@ def main(my_ip):
     print("\nShort the input to ground")
     adc_info = setup_adc(my_ip)
 
+    #Setup M2k to output differential input to DUT
     input("Connect provided test jig to input of DUT. Press any key to continue...")
-    sig_gen.main(sin_freq, sin_amp, sin_offset, sin_phase)
-    print("Please switch on S1 and S2 on test jig")
-    fft_test()
+    libm2k_ctx,siggen = sig_gen.main(sin_freq, sin_amp, sin_offset, sin_phase)
+
+    #Full scale test
+    input("Please switch on S1 and S2 on test jig. Full scale test starting. Press any key to continue..")
+    fft_test(s_num,my_ip,adc_info,q="FS input")
+
+    #Attenuated scale test
+    input("Switch on S3 and S4 on test jig. Attenuated test starting. Press any key to continue..")
+    fft_test(s_num,my_ip,adc_info,q="Attenuated input")
+
+    return libm2k_ctx,siggen
 
 #If test code is ran locally in FPGA, my_ip is just the localhost. If control will be through a Windows machine/external, need to get IP address of the connected setup through LAN.
 if __name__ == '__main__':
@@ -235,9 +241,10 @@ if __name__ == '__main__':
     print("\nConnecting with CN0577 context at %s" % (my_ip))
 
     while (1):
-        main(my_ip)
+        ctx,siggen = main(my_ip)
         print('Test DONE!!\n')
-
+        sig_gen.m2k_close(ctx, siggen)
+        
         #Check if board has passed or failed
         if len(failed_tests) == 0:
             print("\nBoard PASSED!!!")
