@@ -25,7 +25,7 @@ import libm2k
 import math
 import matplotlib.pyplot as plt
 
-available_sample_rates= [10000000]
+available_sample_rates= [750, 7500, 75000, 750000, 7500000, 75000000]
 max_rate = available_sample_rates[-1] # last sample rate = max rate
 min_nr_of_points=10
 max_buffer_size = 256000
@@ -80,15 +80,20 @@ def sine_buffer_generator(channel, freq, ampl, offset, phase):
     samples_per_period = sample_rate / freq
     phase_in_samples = ((phase/360) * samples_per_period)
 
-    #print("sample_rate:",sample_rate)
-    #print("number_of_samples",nr_of_samples)
-    #print("samples_per_period",samples_per_period)
-    #print("phase_in_samples",phase_in_samples)
+    # print("sample_rate:",sample_rate)
+    # print("number_of_samples",nr_of_samples)
+    # print("samples_per_period",samples_per_period)
+    # print("phase_in_samples",phase_in_samples)
 
     for i in range(nr_of_samples):
         buffer.append(offset + ampl * (math.sin(((i + phase_in_samples)/samples_per_period) * 2*math.pi) ))
 
     return sample_rate, buffer
+
+def m2k_close(ctx, siggen):
+    siggen.stop()
+    libm2k.contextClose(ctx)
+    del ctx
 
 def main(freq,ampl,offset,phase):
     ctx=libm2k.m2kOpen()
@@ -114,4 +119,4 @@ def main(freq,ampl,offset,phase):
 
     siggen.push([buffer0,buffer1])
     
-    return ctx
+    return ctx,siggen
