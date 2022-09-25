@@ -33,7 +33,6 @@
 #
 # AUTHOR: TRISHA CABILDO
 
-
 import sys
 import os
 import time
@@ -55,22 +54,21 @@ bin_dir = "/home/analog"
 #Failed test array
 failed_tests = []
 
-sin_offset = 2.048
-sin_amp = 2.048
-sin_phase = 180
-sin_freq = 20000
-n_samples = 256000
-sampling_freq = 10000000
-vref = 4.096
+sin_offset = 2.048              #DC offset of input signal (LTC2387 takes 0 to 4.096V)
+sin_amp = 2.048                 #Amplitude of the differential input signal (Vpp / 2)
+sin_phase = 180                 #Phase for the differential input
+sin_freq = 20000                #20kHz input signal
+n_samples = 256000              #Number of samples taken
+sampling_freq = 10000000        #Master clock @120 MHz (f_sampling = master_clock / 12)
+vref = 4.096                    #From REFBUF pin of LTC2387
 
-#Window type
+#Window type for FFT
 BLACKMAN_HARRIS_92 = 0x30
 def_window_type = BLACKMAN_HARRIS_92
 
 #This function is to check if command line input is correct. Only one argument is needed (serial number of board being tested). If input is more than one argument, test code will exit.
 def check_input():
-    #Total arguments
-    n = len(sys.argv)
+    n = len(sys.argv)                   # Number of total arguments on command line
     if n != 2:
          sys.exit('\nIncorrect syntax! \nExample: python cn0577_prod_test.py 202205100001\n')
     return
@@ -91,7 +89,6 @@ def get_serial():
 #This function writes the bin file to CN0577 EEPROM and changes the default serial number based on the user input. It uses the FMC FRU utility.
 def eeprom_dump(x):
     res1 = ''
-    #res2 = ''
 
     #Change directory to bin_dir path
     os.system("cd %s" % (bin_dir))
@@ -108,11 +105,9 @@ def eeprom_dump(x):
     if (res1):
         sys.exit('Dumping of bin file to eeprom FAILED\n')
 
+#This function gets the rms noise with the inputs to the ADC shorted to ground
 def get_noise(shorted_input_data):
-    noise = []
-    noise = shorted_input_data
-
-    measured_noise = np.std(noise)
+    measured_noise = np.std(shorted_input_data)
     print("Measured Noise: ", measured_noise) 
 
     if measured_noise < 0.4:
@@ -123,12 +118,11 @@ def get_noise(shorted_input_data):
 
     input("Remove connections to input. Press any key to continue")
 
+#This function sets up the ADC
 def setup_adc(my_ip):
     my_adc = adi.ltc2387(uri=my_ip)
-    my_adc.rx_buffer_size = 4096
+    my_adc.rx_buffer_size = 256000
     my_adc.sampling_frequency = 10000000
-
-    print("\nSample Rate: ", my_adc.sampling_frequency)
 
     data = my_adc.rx()
     time.sleep(2)
@@ -136,8 +130,9 @@ def setup_adc(my_ip):
 
     return my_adc
 
+#This function takes the fft and checks the ADC parameters such as frequency bin, fundamental amplitude, THD, SNR and SINAD if within limits
 def sinparam_test(voltage,test_in):
-    #windowed_fft_mag function takes in the analog data out of the ADC with its DC component. It gets the ac part of it inside the function so 'voltage' is passed instead of 'ac'
+    #windowed_fft_mag function takes in the analog data out of the ADC with its DC component. It removes the DC component within the function, thus 'voltage' is used
     fft_data = sp.windowed_fft_mag(voltage,window_type=BLACKMAN_HARRIS_92)
     fund_amp, fund_bin = sp.get_max(fft_data)
 
@@ -189,21 +184,20 @@ def sinparam_test(voltage,test_in):
 
     time.sleep(2)
 
-#This function contains the main test procedure of checking the ADC parameters such as THD, SNR, etc. This will return a 0 or 1 to reflect if board has passed or failed.
+#This function extracts the DC component of the output and checks if it is within limits. After, it calls the sinparam_test function.
 def fft_test(sn,my_ip,my_adc,test_in):
     ser_no = sn
-
     data = my_adc.rx()
 
     x = np.arange(0, len(data))
-    voltage = data * vref / (2 ** 17)
-    dc = np.average(voltage)  # Extract DC component
+    voltage = data * vref / (2 ** 17)   # Since LTC2387 is using bipolar operation and inputs are > 0, total number of levels = 2^ (N-1)
+    dc = np.average(voltage)            # Extract DC component
     if dc < 0.1:
         print("DC offset PASS")
     else:
         print("DC offset FAIL")
         failed_tests.append("Failed DC offset test")
-    ac = voltage - dc  # Extract AC component
+    ac = voltage - dc                   # Extract AC component
 
     sinparam_test(voltage,test_in)
 
@@ -243,7 +237,7 @@ if __name__ == '__main__':
     while (1):
         ctx,siggen = main(my_ip)
         print('Test DONE!!\n')
-        sig_gen.m2k_close(ctx, siggen)
+        sig_gen.m2k_close(ctx, siggen)  #Close m2k
         
         #Check if board has passed or failed
         if len(failed_tests) == 0:
@@ -266,5 +260,5 @@ if __name__ == '__main__':
             exit(0)
         #Any other character than 'q' and 's' will trigger test again
         else:
-            sleep(1)
+            time.sleep(1)
     
