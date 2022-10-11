@@ -37,6 +37,7 @@ import sys
 import os
 import time
 import numpy as np
+import math
 from adi import ltc2387
 import libm2k  
 import sin_params as sp
@@ -107,7 +108,8 @@ def eeprom_dump(x):
 
 #This function gets the rms noise with the inputs to the ADC shorted to ground
 def get_noise(shorted_input_data):
-    measured_noise = np.std(shorted_input_data)
+    noise = shorted_input_data * vref * 2 / (2 ** 18)               #Convert output digital code to voltage
+    measured_noise = np.std(noise)
     print("Measured Noise: ", measured_noise) 
 
     if measured_noise < 0.4:
@@ -121,8 +123,8 @@ def get_noise(shorted_input_data):
 #This function sets up the ADC
 def setup_adc(my_ip):
     my_adc = adi.ltc2387(uri=my_ip)
-    my_adc.rx_buffer_size = 256000
-    my_adc.sampling_frequency = 10000000
+    my_adc.rx_buffer_size = n_samples
+    my_adc.sampling_frequency = sampling_freq
 
     data = my_adc.rx()
     time.sleep(2)
@@ -137,17 +139,17 @@ def sinparam_test(voltage,test_in):
     fund_amp, fund_bin = sp.get_max(fft_data)
 
     f_base = sampling_freq/n_samples
-    freq_bin_theo = sin_freq / f_base
+    freq_bin_theo = math.floor(sin_freq / f_base)
 
     #Compare bin location of theoretical vs actual
-    if fund_bin == freq_bin_theo:
+    if math.floor(fund_bin) == freq_bin_theo:
         print("%s Frequency bin PASS" % test_in)
     else:
         print("%s Frequency bin FAIL" % test_in)
         failed_tests.append("%s failed frequency bin" % test_in)
 
     #Comparing fundamental amplitude of input vs actual
-    if fund_amp > 4.085 and fund_amp < 4.096:
+    if (vref - 0.1) < fund_amp < (vref + 0.1):
         print("%s Fundamental amplitude PASS" % test_in)
     else:
         print("%s Fundamental amplitude FAIL" % test_in)
@@ -190,14 +192,14 @@ def fft_test(sn,my_ip,my_adc,test_in):
     data = my_adc.rx()
 
     x = np.arange(0, len(data))
-    voltage = data * vref / (2 ** 17)   # Since LTC2387 is using bipolar operation and inputs are > 0, total number of levels = 2^ (N-1)
-    dc = np.average(voltage)            # Extract DC component
-    if dc < 0.1:
+    voltage = data * vref / (2 ** 17)                   # Since LTC2387 is using bipolar operation and inputs are > 0, total number of levels = 2^ (N-1)
+    dc = np.average(voltage)                            # Extract DC component
+    if (sin_offset - 0.1) < dc < (sin_offset + 0.1):    # Limits based on LTC2387 datasheet Vcm limits
         print("DC offset PASS")
     else:
         print("DC offset FAIL")
         failed_tests.append("Failed DC offset test")
-    ac = voltage - dc                   # Extract AC component
+    ac = voltage - dc                                   # Extract AC component
 
     sinparam_test(voltage,test_in)
 
