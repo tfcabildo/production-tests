@@ -134,7 +134,7 @@ def main(my_ip):
 if __name__ == '__main__':
     
     # This is running on RPi if hardcoded_ip is used. Add the board ip_address at the end of command line when calling out the code if remote access
-    hardcoded_ip = 'ip:localhost'
+    hardcoded_ip = 'ip:analog.local'
     my_ip = sys.argv[1] if len(sys.argv) >= 2 else hardcoded_ip
     print("Connecting with CN0508 context at %s" % (my_ip))
 
