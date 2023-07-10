@@ -276,6 +276,7 @@ if __name__ == '__main__':
     while (1):
         main(my_ip)
         print('Test DONE!!\n')
+        print("Test took " + str(time.time() - start) + " seconds.")
 
          #Check if board has passed or failed
         if len(failed_tests) == 0:
