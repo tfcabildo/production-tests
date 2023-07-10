@@ -39,6 +39,7 @@ import time
 import numpy as np
 from adi import cn0579
 import libm2k
+import time
 import sin_params as sp
 import m2k_siggen as sig_gen
 
@@ -50,14 +51,14 @@ sin_phase = 0                                   # Phase for input signal
 vref = 5
 n_samples = 256000                              # Number of samples taken
 sampling_freq = 4000000                         # Master clock @32 MHz (f_sampling = master_clock / 8)
-                                """sample_rate: Sample rate in samples per second.
-                                Actual sample rates will be the master clock divided by an integer, for example,
-                                the CN0579 has a 32 MHz clock, so available sample rates will be:
-                                32 MHz / 8 = 4 Msps
-                                32 MHz / 9 = 3.556 Msps
-                                32 MHz / 10 = 3.2 Msps
-                                etc.
-                                """
+                                                """sample_rate: Sample rate in samples per second.
+                                                Actual sample rates will be the master clock divided by an integer, for example,
+                                                the CN0579 has a 32 MHz clock, so available sample rates will be:
+                                                32 MHz / 8 = 4 Msps
+                                                32 MHz / 9 = 3.556 Msps
+                                                32 MHz / 10 = 3.2 Msps
+                                                etc.
+                                                """
 
 BLACKMAN_HARRIS_92 = 0x30                       # Window type for FFT
 def_window_type = BLACKMAN_HARRIS_92            # Window type for FFT
@@ -91,6 +92,14 @@ def setup_579(my_ip):
 
     return my_cn0579
 
+def print_csource(my_cn0579):
+    print("Current source CH0: %s" % my_cn0579.CC_CH0)
+    print("Current source CH1: %s" % my_cn0579.CC_CH1)
+    print("Current source CH2: %s" % my_cn0579.CC_CH2)
+    print("Current source CH3: %s" % my_cn0579.CC_CH3)
+
+    return
+
 # Switches current source on/off. A is the channel number, while mode is on or off. Mode = 1 is on and the opposite for off.
 def csource_switch(my_cn0579, a, mode):
     if mode = 1:
@@ -113,7 +122,7 @@ def csource_switch(my_cn0579, a, mode):
             my_cn0579.CC_CH3 = 0
     
     time.sleep(2)
-
+    print_csource(my_cn0579)
     return
 
 def read_DC(libm2k_ctx):
@@ -125,7 +134,6 @@ def read_DC(libm2k_ctx):
             sys.exit('Failed input DC check\n')
     
     time.sleep(2)
-
     return volt_reading
 
 def set_shift(vr):
@@ -133,23 +141,31 @@ def set_shift(vr):
     print("Calculated Vshift: %s" % vshift)
     return vshift
 
+def print_DAC(my_cn0579):
+    print("Channel 0 DAC: %s" % my_cn0579.shift_voltage0)
+    print("Channel 1 DAC: %s" % my_cn0579.shift_voltage1)
+    print("Channel 2 DAC: %s" % my_cn0579.shift_voltage2)
+    print("Channel 3 DAC: %s" % my_cn0579.shift_voltage3)
+
+    return
+
 def set_DAC(vshift, z, my_cn0579):
     d_code = (65536 * vshift) / vref
     if z = 0:
         my_cn0579.shift_voltage0 = d_code
-        print("Channel 0 DAC: %s" %s d_code)
+        print("Channel 0 DAC: %s" % d_code)
     elif z = 1:
         my_cn0579.shift_voltage1 = d_code
-        print("Channel 1 DAC: %s" %s d_code)
+        print("Channel 1 DAC: %s" % d_code)
     elif z = 1:
         my_cn0579.shift_voltage2 = d_code
-        print("Channel 2 DAC: %s" %s d_code)
+        print("Channel 2 DAC: %s" % d_code)
     else:
         my_cn0579.shift_voltage3 = d_code
-        print("Channel 3 DAC: %s" %s d_code)
+        print("Channel 3 DAC: %s" % d_code)
 
     time.sleep(2)
-
+    print_DAC(my_cn0579)
     return 
 
 def fft_test(my_cn0579, test_in):
@@ -251,6 +267,7 @@ def main(my_ip):
 
 #If test code is ran locally in FPGA, my_ip is just the localhost. If control will be through a Windows machine/external, need to get IP address of the connected setup through LAN.
 if __name__ == '__main__':
+    start = time.time()
     print("ADI packages import done")
     hardcoded_ip = 'ip:localhost'
     my_ip = sys.argv[2] if len(sys.argv) >= 3 else hardcoded_ip
