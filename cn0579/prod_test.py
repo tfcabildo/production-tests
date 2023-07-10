@@ -112,6 +112,8 @@ def csource_switch(my_cn0579, a, mode):
         else:
             my_cn0579.CC_CH3 = 0
     
+    time.sleep(2)
+
     return
 
 def read_DC(libm2k_ctx):
@@ -121,6 +123,8 @@ def read_DC(libm2k_ctx):
         else:
             failed_tests.append("Failed input DC check")
             sys.exit('Failed input DC check\n')
+    
+    time.sleep(2)
 
     return volt_reading
 
@@ -143,6 +147,9 @@ def set_DAC(vshift, z, my_cn0579):
     else:
         my_cn0579.shift_voltage3 = d_code
         print("Channel 3 DAC: %s" %s d_code)
+
+    time.sleep(2)
+
     return 
 
 def fft_test(my_cn0579, test_in):
@@ -158,7 +165,7 @@ def fft_test(my_cn0579, test_in):
         failed_tests.append("Failed DC offset test")
 
     #windowed_fft_mag function takes in the analog data out of the ADC with its DC component. It removes the DC component within the function, thus 'voltage' is used
-    fft_data = sp.windowed_fft_mag(adc_data,window_type=BLACKMAN_HARRIS_92)
+    fft_data = sp.windowed_fft_mag(adc_data, window_type=BLACKMAN_HARRIS_92)
     fund_amp, fund_bin = sp.get_max(fft_data)
 
     f_base = sampling_freq/n_samples
@@ -211,29 +218,36 @@ def fft_test(my_cn0579, test_in):
 
     time.sleep(2)
 
-def channel_tests(my_cn0579):
-    for x in range(0,4):
-        csource_switch(my_cn0579, x, 1)
-        libm2k_ctx,siggen = sig_gen.main(sin_freq, sin_amp, sin_offset, sin_phase)
-        volt_reading = read_DC(libm2k_ctx)
-        vshift = set_shift(volt_reading)
-        set_DAC(vshift, x, my_cn0579)
-        fft_test(my_cn0579, q="FS input")
-
-    return
+def channel_tests(my_cn0579, test_type, x):
+    csource_switch(my_cn0579, x, 1)                                                                 # Turns on current source for channel x
+    libm2k_ctx,siggen = sig_gen.main(sin_freq, sin_amp, sin_offset, sin_phase)                      # Turns on M2k output
+    volt_reading = read_DC(libm2k_ctx)                                                              # Read DC voltage of the input signal using the M2k voltmeter
+    vshift = set_shift(volt_reading)                                                                # Compute for the Vshift
+    set_DAC(vshift, x, my_cn0579)                                                                   # Set output of the DAC to corresponding digital code of the Vshift
+    fft_test(my_cn0579, test_type)                                                                  # Compute sinparams
+    set_DAC(0, x, my_cn0579)                                                                        # Set output of the DAC to 0
+    csource_switch(my_cn0579, x, 0)                                                                 # Turn off current source for channel x                                                               
+    sig_gen.m2k_close(libm2k_ctx,siggen)                                                            # Turn off M2k for channel x
+    return 
 
 def main(my_ip):
     print("CN0579 Production Test \nTest script starting....")
 
-    #Checking input, getting serial number and printing
     check_input()
     s_num = get_serial()
 
     input("Insert test jig to CN0579 according to test procedure....Press enter to continue:")
-    brd_info = setup_579(my_ip)
-    channel_tests(brd_info)
+    my_cn0579 = setup_579(my_ip)
 
-    return
+    for x in range(0,4):
+        print("Starting test for channel %s...\n" % x)
+        channel_tests(my_cn0579, q = "FS test", x)
+        time.sleep(2)
+        channel_tests(my_cn0579, q = "Attenuated test", x)
+        time.sleep(2)
+        print("Channel %s test done\n" % x)
+
+    return 
 
 #If test code is ran locally in FPGA, my_ip is just the localhost. If control will be through a Windows machine/external, need to get IP address of the connected setup through LAN.
 if __name__ == '__main__':
@@ -245,5 +259,26 @@ if __name__ == '__main__':
     while (1):
         main(my_ip)
         print('Test DONE!!\n')
-        exit(0)
 
+         #Check if board has passed or failed
+        if len(failed_tests) == 0:
+            print("Board PASSED!!!")
+        else:
+            print("Board FAILED the following tests:")
+            for failure in failed_tests:
+                print(failure)
+            print("\nNote failures and set aside for debug.")
+        
+        #Prompt user to shutdown, repeat test or quit script
+        x = input("Type \'s\' to shut down, \'a\' to test again, or \'q\'to quit:  ")
+        if (x == 's'):
+            if os.name == "posix":
+                os.system("sudo shutdown -h now")
+            else:
+                print("Sorry, can only shut down system when running locally on DE-10\n")
+                break
+        elif (x == 'q'):
+            exit(0)
+        #Any other character than 'q' and 's' will trigger test again
+        else:
+            time.sleep(1)
