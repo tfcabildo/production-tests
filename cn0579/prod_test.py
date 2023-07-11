@@ -270,7 +270,7 @@ def main(my_ip):
 if __name__ == '__main__':
     start = time.time()
     print("ADI packages import done")
-    hardcoded_ip = 'ip:localhost'
+    hardcoded_ip = 'ip:analog.local'
     my_ip = sys.argv[2] if len(sys.argv) >= 3 else hardcoded_ip
     print("\nConnecting with CN0579 context at %s" % (my_ip))
 
