@@ -256,9 +256,10 @@ def main(my_ip):
     my_cn0579 = setup_579(my_ip)
 
     for x in range(0,4):
-        print("Starting test for channel %s...\n" % x)
+        input("Starting FS test for channel %s...Make sure switch is in FS mode. Press enter to continue" % x)
         channel_tests(my_cn0579, q = "FS test", x)
         time.sleep(2)
+        input("Starting Attenuated test for channel %s...Make sure switch is in attenuated mode. Press enter to continue" % x)
         channel_tests(my_cn0579, q = "Attenuated test", x)
         time.sleep(2)
         print("Channel %s test done\n" % x)
@@ -275,7 +276,7 @@ if __name__ == '__main__':
 
     while (1):
         main(my_ip)
-        print('Test DONE!!\n')
+        print('Production test DONE!!\n')
         print("Test took " + str(time.time() - start) + " seconds.")
 
          #Check if board has passed or failed
