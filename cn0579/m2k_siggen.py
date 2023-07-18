@@ -24,6 +24,7 @@
 import libm2k
 import math
 import matplotlib.pyplot as plt
+import time
 
 available_sample_rates= [750, 7500, 75000, 750000, 7500000, 75000000]
 max_rate = available_sample_rates[-1] # last sample rate = max rate
@@ -95,25 +96,26 @@ def m2k_close(ctx, siggen):
     libm2k.contextClose(ctx)
     del ctx
 
-def voltmeter(ctx):
+def voltmeter():
+    ctx=libm2k.m2kOpen()
+
+    if ctx is None:
+        print("Connection Error: No ADALM2000 device available/connected to your PC.")
+        exit(1)
+    
     meter = ctx.getAnalogIn()
     meter.reset()
     ctx.calibrateADC()
     meter.enableChannel(channel,True)
     reading = meter.getVoltage()[channel]
 
-    return reading
+    return reading, ctx
 
-def main(freq,ampl,offset,phase):
-    ctx=libm2k.m2kOpen()
-
-    if ctx is None:
-        print("Connection Error: No ADALM2000 device available/connected to your PC.")
-        exit(1)
-
+def main(freq,ampl,offset,phase,ctx):
     siggen=ctx.getAnalogOut()
-    
+    time.sleep(1)   
     ctx.calibrateDAC()
+    time.sleep(1)
 
     #call buffer generator, returns sample rate and buffer
     samp0,buffer0 = sine_buffer_generator(0,freq,ampl,offset,0)
@@ -126,5 +128,6 @@ def main(freq,ampl,offset,phase):
     siggen.setSampleRate(1, samp1)
 
     siggen.push([buffer0,buffer1])
+    time.sleep(2)
     
-    return ctx,siggen
+    return siggen
